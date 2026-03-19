@@ -1,5 +1,5 @@
-# APEX Daily Sprint Report — 6 AM PST Mon–Fri (runs even when your Mac is off)
-name: Daily Sprint Report
+# StandupPulse — 6 AM PST Mon–Fri (runs even when your Mac is off)
+name: StandupPulse
 
 on:
   schedule:
@@ -9,7 +9,7 @@ on:
 
 # Prevent overlapping runs; cancel in-progress if a new one starts
 concurrency:
-  group: daily-sprint-report
+  group: standup-pulse
   cancel-in-progress: false
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Run daily sprint report (retry up to 3x on failure)
+      - name: Run StandupPulse (retry up to 3x on failure)
         uses: nick-fields/retry@v3
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}

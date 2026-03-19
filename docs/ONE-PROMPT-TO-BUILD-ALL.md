@@ -1,13 +1,13 @@
 # One Prompt to Build the Daily Report Automation
 
-**Copy the entire prompt below and paste it into Cursor.** The AI will guide you step-by-step to build your own daily sprint report—no extra questions, just one detail at a time.
+**Copy the entire prompt below and paste it into Cursor.** The AI will guide you step-by-step to build your own StandupPulse—no extra questions, just one detail at a time.
 
 ---
 
 ## THE PROMPT (copy everything below this line)
 
 ```
-You are going to build a complete Daily Sprint Report automation for me. Follow these rules strictly:
+You are going to build a complete StandupPulse automation for me. Follow these rules strictly:
 
 1. DO NOT ask multiple questions at once. Ask for ONE piece of information at a time, wait for my answer, then proceed.
 2. Work step-by-step. Complete each step before moving to the next.
@@ -41,7 +41,7 @@ Start by asking me for the FIRST piece of information you need. Go one at a time
 2. **Paste** into a new Cursor chat
 3. **Answer** each question as the AI asks (one at a time)
 4. **Choose** Manual or Schedule at the end
-5. **Done** — they have their own daily report automation
+5. **Done** — they have their own StandupPulse automation
 
 ---
 

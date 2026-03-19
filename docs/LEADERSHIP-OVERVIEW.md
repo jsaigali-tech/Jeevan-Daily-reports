@@ -1,4 +1,4 @@
-# APEX Daily Sprint Report — Leadership Overview
+# StandupPulse — Leadership Overview
 
 **AI-Powered Automated Daily Status for AINV, ARPT & AEM**
 
@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-The **APEX Daily Sprint Report** is an automated workflow that delivers a concise, AI-analyzed status report to Slack every weekday morning. It pulls data from Jira and Confluence, uses AI to prioritize and summarize, and surfaces the most important actions—without manual effort.
+**StandupPulse** is an automated workflow that delivers a concise, AI-analyzed status report to Slack every weekday morning. It pulls data from Jira and Confluence, uses AI to prioritize and summarize, and surfaces the most important actions—without manual effort.
 
 **Key benefits:**
 - **Zero manual effort** — Runs automatically at 6 AM PST, Mon–Fri
@@ -121,7 +121,7 @@ flowchart TD
 
 ## Summary
 
-The APEX Daily Sprint Report automates status gathering and analysis so teams get a consistent, AI-enhanced view of sprint health every morning—without manual updates or meetings.
+StandupPulse automates status gathering and analysis so teams get a consistent, AI-enhanced view of sprint health every morning—without manual updates or meetings.
 
 ---
 
