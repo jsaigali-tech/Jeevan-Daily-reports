@@ -55,6 +55,18 @@ def jira_request(jql: str, fields: list[str]) -> list[dict]:
         sys.exit(1)
 
 
+def _safe_jira_request(jql: str, fields: list[str]) -> list[dict]:
+    """Like jira_request but returns [] on error (for optional queries like Blocked)."""
+    url = f"{JIRA_BASE}/rest/api/3/search/jql"
+    headers = {**_auth_headers(), "Content-Type": "application/json"}
+    body = {"jql": jql, "maxResults": 50, "fields": fields}
+    try:
+        data = _post(url, headers, body)
+        return data.get("issues", [])
+    except urllib.error.HTTPError:
+        return []
+
+
 def jira_get_comments(issue_key: str) -> list[dict]:
     url = f"{JIRA_BASE}/rest/api/3/issue/{issue_key}/comment"
     try:
@@ -66,7 +78,7 @@ def jira_get_comments(issue_key: str) -> list[dict]:
                 "body": _strip_html(c.get("body", {}).get("content", [])),
                 "created": c.get("created", "")[:10],
             }
-            for c in comments[-10:]  # last 10 comments
+            for c in comments[-15:]  # last 15 comments
         ]
     except urllib.error.HTTPError:
         return []
@@ -124,7 +136,7 @@ def _gemini_analyze(context: str, system_prompt: str) -> str:
     payload = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"parts": [{"text": context}]}],
-        "generationConfig": {"maxOutputTokens": 2500, "temperature": 0.3},
+        "generationConfig": {"maxOutputTokens": 4000, "temperature": 0.3},
     }
     try:
         resp = _ai_request(url, {"Content-Type": "application/json"}, payload)
@@ -147,7 +159,7 @@ def _openai_analyze(context: str, system_prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": context},
         ],
-        "max_tokens": 2500,
+        "max_tokens": 4000,
         "temperature": 0.3,
     }
     try:
@@ -206,13 +218,20 @@ def _fmt_link(key: str, text: str) -> str:
     return f"<https://axsteam.atlassian.net/browse/{key}|{text}>"
 
 
-def _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs) -> str:
+def _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs, blocked_issues=None, recent_changes=None) -> str:
     """Basic report when no AI key is available."""
+    blocked_issues = blocked_issues or []
+    recent_changes = recent_changes or []
     lines = []
     ainv_bugs = [i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "AINV"]
     arpt_bugs = [i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "ARPT"]
 
-    lines.append("*👤 YOUR ITEMS (" + str(len(my_items)) + " open)*")
+    if blocked_issues:
+        lines.append("*BLOCKERS (" + str(len(blocked_issues)) + ")*")
+        for i in blocked_issues[:5]:
+            lines.append(f"• {_fmt_link(i['key'], i['key'])} — {i['fields'].get('summary', '')[:50]} | {i['fields'].get('status', {}).get('name', '')}")
+        lines.append("")
+    lines.append("*YOUR ITEMS (" + str(len(my_items)) + " open)*")
     lines.append("──────────────────────────")
     for i in my_items:
         f = i["fields"]
@@ -239,8 +258,15 @@ def _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs
     while len(actions) < 3:
         actions.append(f"{len(actions)+1}. Review open bugs and assign unassigned Critical.")
     lines.extend(actions[:3])
+    if recent_changes:
+        lines.append("")
+        lines.append("*RECENT CHANGES (last 7d)*")
+        for i in recent_changes[:5]:
+            lines.append(f"• {_fmt_link(i['key'], i['key'])} — {i['fields'].get('summary', '')[:40]}... | {i['fields'].get('status', {}).get('name', '')} | {i['fields'].get('updated', '')[:10]}")
     lines.append("")
-    lines.append("*📎 Quick links:* <https://axsteam.atlassian.net/jira/software/projects/AINV/boards|AINV> | <https://axsteam.atlassian.net/jira/software/projects/ARPT/boards|ARPT> | <https://axsteam.atlassian.net/jira/software/projects/AEM/boards|AEM>")
+    lines.append("*RESOURCES:*")
+    lines.append("<https://axsteam.atlassian.net/jira/software/projects/AINV/boards|AINV> | <https://axsteam.atlassian.net/jira/software/projects/ARPT/boards|ARPT> | <https://axsteam.atlassian.net/jira/software/projects/AEM/boards|AEM>")
+    lines.append("<https://axsteam.atlassian.net/issues/?jql=project+in+(AINV,ARPT,AEM)+AND+issuetype=Bug+AND+statusCategory+!=+Done|All bugs> | <https://axsteam.atlassian.net/wiki|Confluence>")
     return "\n".join(lines)
 
 
@@ -270,9 +296,10 @@ def fmt_issue(issue: dict, include_comments: bool = False) -> str:
 
 def main() -> None:
     print("Fetching Jira data...")
+    base_fields = ["summary", "status", "issuetype", "priority", "updated", "project", "assignee", "created", "duedate", "fixVersions"]
     my_items = jira_request(
         f'project in (AINV, ARPT, AEM) AND assignee = "{JEEVAN_ACCOUNT_ID}" AND statusCategory != Done ORDER BY priority DESC, updated DESC',
-        ["summary", "status", "issuetype", "priority", "updated", "project", "assignee", "created", "duedate", "fixVersions"],
+        base_fields,
     )
     bugs_ainv_arpt = jira_request(
         "project in (AINV, ARPT) AND issuetype = Bug AND statusCategory != Done ORDER BY priority DESC, updated DESC",
@@ -290,6 +317,15 @@ def main() -> None:
         "project = AEM AND issuetype = Bug AND statusCategory != Done ORDER BY priority DESC, updated DESC",
         ["summary", "status", "priority", "assignee", "updated"],
     )
+    # Blocked issues (status=Blocked) and recently updated (last 7 days)
+    blocked_issues = _safe_jira_request(
+        "project in (AINV, ARPT, AEM) AND status = Blocked ORDER BY priority DESC, updated DESC",
+        ["summary", "status", "priority", "assignee", "project", "updated"],
+    )
+    recent_changes = jira_request(
+        "project in (AINV, ARPT, AEM) AND updated >= -7d ORDER BY updated DESC",
+        ["summary", "status", "issuetype", "priority", "assignee", "project", "updated"],
+    )
 
     print("Fetching comments for your items and critical bugs...")
     my_items_with_comments = []
@@ -298,58 +334,84 @@ def main() -> None:
     critical_bugs = [i for i in bugs_ainv_arpt if i["fields"].get("priority", {}).get("name") == "Critical"]
     critical_with_comments = [fmt_issue(i, include_comments=True) for i in critical_bugs[:5]]
 
-    print("Searching Confluence for release/schedule info...")
-    confluence_release = confluence_search('type=page AND (text~"release" OR text~"schedule" OR text~"AINV" OR text~"ARPT")', limit=5)
+    print("Searching Confluence for release, blockers, changelog...")
+    confluence_release = confluence_search('type=page AND (text~"release" OR text~"schedule" OR text~"AINV" OR text~"ARPT")', limit=8)
+    confluence_blockers = confluence_search('type=page AND (text~"blocker" OR text~"blocked" OR text~"known issue")', limit=5)
+    confluence_changelog = confluence_search('type=page AND (text~"changelog" OR text~"release notes")', limit=5)
     confluence_content = "\n".join(
         f"- {r['title']}: {r['excerpt']} | {r['url']}" for r in confluence_release
-    ) if confluence_release else "(No release/schedule pages found in Confluence)"
+    ) if confluence_release else "(None)"
+    confluence_blockers_str = "\n".join(f"- {r['title']}: {r['url']}" for r in confluence_blockers) if confluence_blockers else "(None)"
+    confluence_changelog_str = "\n".join(f"- {r['title']}: {r['url']}" for r in confluence_changelog) if confluence_changelog else "(None)"
 
     context = f"""
 === JIRA: YOUR ITEMS (assigned to Jeevan, not Done) ===
 {chr(10).join(my_items_with_comments) if my_items_with_comments else "None"}
 
+=== JIRA: BLOCKED ISSUES (status=Blocked) ===
+{chr(10).join(fmt_issue(i) for i in blocked_issues[:10]) if blocked_issues else "None"}
+
+=== JIRA: RECENT CHANGES (updated last 7 days) ===
+{chr(10).join(fmt_issue(i) for i in recent_changes[:15]) if recent_changes else "None"}
+
 === JIRA: CRITICAL BUGS (AINV/ARPT) with recent comments ===
 {chr(10).join(critical_with_comments) if critical_with_comments else "None"}
 
 === JIRA: BUGS TARGETING UNRELEASED VERSION (release blockers) ===
-{chr(10).join(fmt_issue(i) for i in prerelease[:3]) if prerelease else "None"}
+{chr(10).join(fmt_issue(i) for i in prerelease[:5]) if prerelease else "None"}
 
 === JIRA: NEW STORIES (last 14 days) ===
-{chr(10).join(fmt_issue(i) for i in new_stories[:5]) if new_stories else "None"}
+{chr(10).join(fmt_issue(i) for i in new_stories[:8]) if new_stories else "None"}
 
 === JIRA: BUG COUNTS ===
 AINV: {len([i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "AINV"])} open | ARPT: {len([i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "ARPT"])} open | AEM: {len(aem_bugs)} open
 
-=== CONFLUENCE: Release/schedule info ===
+=== CONFLUENCE: Release/schedule ===
 {confluence_content}
+
+=== CONFLUENCE: Blocker/known issue docs ===
+{confluence_blockers_str}
+
+=== CONFLUENCE: Changelog/release notes ===
+{confluence_changelog_str}
+
+=== SUPPORT LINKS (include all in report) ===
+AINV: https://axsteam.atlassian.net/jira/software/projects/AINV/boards
+ARPT: https://axsteam.atlassian.net/jira/software/projects/ARPT/boards
+AEM: https://axsteam.atlassian.net/jira/software/projects/AEM/boards
+All bugs: https://axsteam.atlassian.net/issues/?jql=project+in+(AINV,ARPT,AEM)+AND+issuetype=Bug+AND+statusCategory+!=+Done
+My items: https://axsteam.atlassian.net/issues/?jql=assignee+%3D+currentUser()+AND+project+in+(AINV,ARPT,AEM)+AND+statusCategory+!=+Done
+Confluence: https://axsteam.atlassian.net/wiki
 """
 
-    system_prompt = """You are an expert sprint analyst for APEX (AINV, ARPT, AEM). Your job is to analyze Jira data + Confluence and produce a SMART, ACTIONABLE StandupPulse report for Jeevan.
+    system_prompt = """You are an expert sprint analyst for APEX (AINV, ARPT, AEM). Produce a DETAILED, COMPREHENSIVE StandupPulse report. Do NOT miss anything important.
 
-Analyze:
+ANALYZE THOROUGHLY:
 1. Comments on tickets — what passed, what failed, what needs follow-up, blockers
 2. Priorities — what should Jeevan focus on first today
 3. Deadlines — due dates, fix versions, scheduled releases
 4. Confluence — map release info to Jira tickets, identify risks
 5. Risk level — overall risk (HIGH/MEDIUM/LOW) and where to focus first
 
-Output format (use Slack mrkdwn): 
-- Start with a 2–3 sentence EXECUTIVE SUMMARY
-- *👤 YOUR ITEMS* — prioritize by urgency from comments; call out if reviewer feedback needed, tests passed/failed
-- *🐛 BUGS TO WATCH* — critical, release blockers, unassigned
+OUTPUT FORMAT (Slack mrkdwn): 
+- *EXECUTIVE SUMMARY* — 3–4 sentences
+- *BLOCKERS* — Every blocked issue with link
+- *RECENT CHANGES* — Notable updates last 7d
+- *YOUR ITEMS* — prioritize by urgency from comments; call out if reviewer feedback needed, tests passed/failed
+- *BUGS TO WATCH* — Critical, release blockers, unassigned
 - *🚦 RELEASE READINESS* — risk level, what’s blocking release
-- *📌 TOP 3–5 ACTIONS TODAY* — specific, actionable (not generic)
-- *📎 Quick links* — AINV, ARPT, AEM board links
+- *TOP 5 ACTIONS TODAY* — Specific, ordered
+- *RESOURCES* — AINV, ARPT, AEM boards, all bugs, my items, Confluence. Format: <url|text>
 
 Use Jira links: <https://axsteam.atlassian.net/browse/KEY|KEY>
-Be concise. No fluff. If something is inaccurate or irrelevant, omit it. Focus on what matters for today."""
+Be thorough. Include all support links. Do not skip blockers or recent changes."""
 
     print("Generating AI report...")
     report = ai_analyze(context, system_prompt)
 
     if not report:
         print("No AI key (GEMINI_API_KEY or OPENAI_API_KEY). Using basic format.", file=sys.stderr)
-        report = _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs)
+        report = _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs, blocked_issues, recent_changes)
 
     slack_post(report)
     print("✅ StandupPulse posted to Slack.")
