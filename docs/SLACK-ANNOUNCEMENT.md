@@ -7,41 +7,27 @@
 ## THE MESSAGE
 
 ```
-Hey team 👋
+hey team
 
-Wanted to share something I built that’s been helping me stay on top of things — a *Daily Sprint Report* that lands in Slack so you’re ready before standups without the usual scramble.
+so i built this daily report thing that dumps into slack — basically pulls my jira stuff, bugs, release blockers, comments, and puts it all in one message. been using it for a bit and it's actually helped me not scramble right before standups
 
-*What it does*
-Pulls your Jira items, bugs, release blockers, and comments → formats them into a clean report → posts it to Slack. One place to see what matters.
+it grabs data from jira (and confluence for release info) based on filters — your items, open bugs, unreleased stuff, etc. then formats it and posts
 
-*How it fetches data*
-Uses filters to grab: your assigned items, open bugs, stuff targeting unreleased versions, plus Confluence for release info. All in one snapshot.
+you can do it two ways: scheduled at 6am on weekdays (just filtered data, no ai) or on-demand in cursor — type "run my daily report" and it uses ai to actually analyze everything and tell you what to focus on. i use both depending on the day
 
-*Two ways to run it*
+[attach your video]
 
-• *Scheduled* — Runs at 6 AM on weekdays. Filtered data, formatted. No AI, just the facts. Set it and forget it.
+if anyone wants to set up their own — i wrote a prompt you can paste into cursor and it walks you through it. links below. lmk if you hit any snags
 
-• *On-demand* — In Cursor, type “Run my daily report.” Full AI analysis: comments, priorities, what passed/failed, where to focus. Smarter summary when you need it.
-
-Pick whichever fits your style.
-
-*Demo* 🎬
-[Attach your video here]
-
-*Want your own?*
-One prompt in Cursor walks you through setup step by step. No prior experience needed.
-
-→ Prompt & instructions: https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
-→ Full repo: https://github.com/jsaigali-tech/Jeevan-Daily-reports
-
-Questions? Happy to help — just reach out.
+https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
+https://github.com/jsaigali-tech/Jeevan-Daily-reports
 ```
 
 ---
 
 ## Tips for Your Recording
 
-1. **Start** — Cursor chat open, show the prompt or “Run daily report”
+1. **Start** — Cursor chat open, show the prompt or "Run daily report"
 2. **Trigger** — Go to GitHub Actions → Run workflow
 3. **Result** — Switch to Slack, show the notification and report content
 4. **Keep it short** — 1–2 minutes is enough
