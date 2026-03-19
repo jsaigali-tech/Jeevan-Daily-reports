@@ -121,7 +121,7 @@ def confluence_search(cql: str, limit: int = 5) -> list[dict]:
 def _ai_request(url: str, headers: dict, payload: dict) -> str:
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, method="POST", headers=headers)
-    with urllib.request.urlopen(req, timeout=90) as r:
+    with urllib.request.urlopen(req, timeout=120) as r:
         resp = json.loads(r.read().decode())
     return resp
 
@@ -136,7 +136,7 @@ def _gemini_analyze(context: str, system_prompt: str) -> str:
     payload = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"parts": [{"text": context}]}],
-        "generationConfig": {"maxOutputTokens": 4000, "temperature": 0.3},
+        "generationConfig": {"maxOutputTokens": 8000, "temperature": 0.3},
     }
     try:
         resp = _ai_request(url, {"Content-Type": "application/json"}, payload)
@@ -159,7 +159,7 @@ def _openai_analyze(context: str, system_prompt: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": context},
         ],
-        "max_tokens": 4000,
+        "max_tokens": 8000,
         "temperature": 0.3,
     }
     try:
@@ -218,14 +218,26 @@ def _fmt_link(key: str, text: str) -> str:
     return f"<https://axsteam.atlassian.net/browse/{key}|{text}>"
 
 
-def _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs, blocked_issues=None, recent_changes=None) -> str:
+def _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs, blocked_issues=None, recent_changes=None, deployed_to_qa=None, ready_for_prod=None) -> str:
     """Basic report when no AI key is available."""
     blocked_issues = blocked_issues or []
     recent_changes = recent_changes or []
+    deployed_to_qa = deployed_to_qa or []
+    ready_for_prod = ready_for_prod or []
     lines = []
     ainv_bugs = [i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "AINV"]
     arpt_bugs = [i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "ARPT"]
 
+    if deployed_to_qa:
+        lines.append("*DEPLOYED TO QA (" + str(len(deployed_to_qa)) + ")*")
+        for i in deployed_to_qa[:8]:
+            lines.append(f"• {_fmt_link(i['key'], i['key'])} — {i['fields'].get('summary', '')[:50]} | {i['fields'].get('status', {}).get('name', '')}")
+        lines.append("")
+    if ready_for_prod:
+        lines.append("*READY FOR PRODUCTION (" + str(len(ready_for_prod)) + ")*")
+        for i in ready_for_prod[:5]:
+            lines.append(f"• {_fmt_link(i['key'], i['key'])} — {i['fields'].get('summary', '')[:50]}")
+        lines.append("")
     if blocked_issues:
         lines.append("*BLOCKERS (" + str(len(blocked_issues)) + ")*")
         for i in blocked_issues[:5]:
@@ -289,8 +301,8 @@ def fmt_issue(issue: dict, include_comments: bool = False) -> str:
         comments = jira_get_comments(key)
         if comments:
             lines.append("  Comments (recent):")
-            for c in comments[-3:]:
-                lines.append(f"    - {c['created']} {c['author']}: {c['body'][:120]}...")
+            for c in comments[-5:]:
+                lines.append(f"    - {c['created']} {c['author']}: {c['body'][:200]}")
     return "\n".join(lines)
 
 
@@ -325,6 +337,15 @@ def main() -> None:
     recent_changes = jira_request(
         "project in (AINV, ARPT, AEM) AND updated >= -7d ORDER BY updated DESC",
         ["summary", "status", "issuetype", "priority", "assignee", "project", "updated"],
+    )
+    # QA Lead: items deployed/in QA and ready for prod (status names may vary per board)
+    deployed_to_qa = _safe_jira_request(
+        'project in (AINV, ARPT, AEM) AND status in ("In QA", "QA", "Deployed to QA", "Ready for QA", "Testing", "QA In Progress") ORDER BY updated DESC',
+        ["summary", "status", "issuetype", "priority", "assignee", "project", "updated", "fixVersions"],
+    )
+    ready_for_prod = _safe_jira_request(
+        'project in (AINV, ARPT, AEM) AND status in ("Ready for Production", "Ready for Prod", "Ready for Release", "Ready for Release to Production") ORDER BY updated DESC',
+        ["summary", "status", "issuetype", "priority", "assignee", "project", "updated", "fixVersions"],
     )
 
     print("Fetching comments for your items and critical bugs...")
@@ -363,6 +384,12 @@ def main() -> None:
 === JIRA: NEW STORIES (last 14 days) ===
 {chr(10).join(fmt_issue(i) for i in new_stories[:8]) if new_stories else "None"}
 
+=== JIRA: DEPLOYED TO QA (needs test execution) ===
+{chr(10).join(fmt_issue(i, include_comments=True) for i in deployed_to_qa[:15]) if deployed_to_qa else "None"}
+
+=== JIRA: READY FOR PRODUCTION ===
+{chr(10).join(fmt_issue(i) for i in ready_for_prod[:10]) if ready_for_prod else "None"}
+
 === JIRA: BUG COUNTS ===
 AINV: {len([i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "AINV"])} open | ARPT: {len([i for i in bugs_ainv_arpt if i["fields"]["project"]["key"] == "ARPT"])} open | AEM: {len(aem_bugs)} open
 
@@ -384,34 +411,39 @@ My items: https://axsteam.atlassian.net/issues/?jql=assignee+%3D+currentUser()+A
 Confluence: https://axsteam.atlassian.net/wiki
 """
 
-    system_prompt = """You are an expert sprint analyst for APEX (AINV, ARPT, AEM). Produce a DETAILED, COMPREHENSIVE StandupPulse report. Do NOT miss anything important.
+    system_prompt = """You are an expert QA Lead and sprint analyst for APEX (AINV, ARPT, AEM). Produce a POWERFUL, MANAGER-READY StandupPulse report for Jeevan (QA Lead). Be EXTREMELY detailed. Every mention MUST include a link.
 
-ANALYZE THOROUGHLY:
-1. Comments on tickets — what passed, what failed, what needs follow-up, blockers
-2. Priorities — what should Jeevan focus on first today
-3. Deadlines — due dates, fix versions, scheduled releases
-4. Confluence — map release info to Jira tickets, identify risks
-5. Risk level — overall risk (HIGH/MEDIUM/LOW) and where to focus first
+QUICK SNAPSHOT (top): 2-3 bullets — key blockers, QA pipeline status, top risk. Manager reads in 10 seconds.
+
+PER-TASK: For each task — Status | What is going on (from comments) | What is needed | Link.
+
+QA LEAD SECTIONS:
+1. DEPLOYED TO QA — For EACH item: summary, status, assignee. SUGGESTED TEST CASES (3-5 scenarios including EDGE CASES: boundary, error handling, negative flows). Link.
+2. READY FOR PRODUCTION — Items ready for prod, release risk.
+3. QA PIPELINE HEALTH — What blocks QA, what needs deployment.
+
+AI INSIGHTS AND FURTHER STEPS: 3-5 bullet analysis + specific next actions with ticket links.
 
 OUTPUT FORMAT (Slack mrkdwn): 
-- *EXECUTIVE SUMMARY* — 3–4 sentences
+- *QUICK SNAPSHOT*
 - *BLOCKERS* — Every blocked issue with link
-- *RECENT CHANGES* — Notable updates last 7d
-- *YOUR ITEMS* — prioritize by urgency from comments; call out if reviewer feedback needed, tests passed/failed
+- *DEPLOYED TO QA* (test cases + edge cases per item)
+- *READY FOR PRODUCTION*
+- *YOUR ITEMS* (per-task: status, what is going on, what is needed, link)
+- *RECENT CHANGES*
 - *BUGS TO WATCH* — Critical, release blockers, unassigned
 - *🚦 RELEASE READINESS* — risk level, what’s blocking release
-- *TOP 5 ACTIONS TODAY* — Specific, ordered
-- *RESOURCES* — AINV, ARPT, AEM boards, all bugs, my items, Confluence. Format: <url|text>
+- *AI INSIGHTS AND FURTHER STEPS*
+- *RESOURCES* — All links
 
-Use Jira links: <https://axsteam.atlassian.net/browse/KEY|KEY>
-Be thorough. Include all support links. Do not skip blockers or recent changes."""
+EVERY ticket = link. Format: <https://axsteam.atlassian.net/browse/KEY|KEY>"""
 
     print("Generating AI report...")
     report = ai_analyze(context, system_prompt)
 
     if not report:
         print("No AI key (GEMINI_API_KEY or OPENAI_API_KEY). Using basic format.", file=sys.stderr)
-        report = _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs, blocked_issues, recent_changes)
+        report = _fallback_report(my_items, bugs_ainv_arpt, new_stories, prerelease, aem_bugs, blocked_issues, recent_changes, deployed_to_qa, ready_for_prod)
 
     slack_post(report)
     print("✅ StandupPulse posted to Slack.")
