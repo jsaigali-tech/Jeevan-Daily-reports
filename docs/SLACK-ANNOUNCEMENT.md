@@ -9,15 +9,13 @@
 ```
 hey team
 
-so i built this daily report thing that dumps into slack — basically pulls my jira stuff, bugs, release blockers, comments, and puts it all in one message. been using it for a bit and it's actually helped me not scramble right before standups
+built a thing that sends a daily report to slack — pulls my jira items, bugs, release blockers, and comments into one message. saves me from digging through tickets right before standups
 
-it grabs data from jira (and confluence for release info) based on filters — your items, open bugs, unreleased stuff, etc. then formats it and posts
-
-you can do it two ways: scheduled at 6am on weekdays (just filtered data, no ai) or on-demand in cursor — type "run my daily report" and it uses ai to actually analyze everything and tell you what to focus on. i use both depending on the day
+runs two ways: on a schedule (6am weekdays) it just grabs the data and formats it. or you can run it in cursor when you want — type "run my daily report" and it uses ai to analyze everything and tell you what to focus on
 
 [attach your video]
 
-if anyone wants to set up their own — i wrote a prompt you can paste into cursor and it walks you through it. links below. lmk if you hit any snags
+if you want to set one up for yourself, there's a prompt you can paste into cursor that walks you through it. links below — ping me if you get stuck
 
 https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
 https://github.com/jsaigali-tech/Jeevan-Daily-reports
