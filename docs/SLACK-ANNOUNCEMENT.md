@@ -7,52 +7,26 @@
 ## THE MESSAGE
 
 ```
-Hey team! 👋
+Hey team,
 
-I built something I’d like to share — a **Daily Sprint Report bot** that gives you a quick, AI-powered snapshot of your work before meetings.
+I put together a daily sprint report thing and thought I'd share it. Basically it pulls your Jira items, bugs, release blockers, and comments, then sends a summary to Slack so you can get up to speed before standups without digging through tickets.
 
-**Why I built it**
+Here's how it works: it fetches data from Jira (and Confluence for release info) based on filters — your assigned items, open bugs, stuff targeting unreleased versions, etc. Then it formats that into a report and posts it.
 
-Most of us work across multiple projects (AINV, ARPT, AEM) with a lot going on. There’s often little time before standups or meetings to get a clear picture of priorities, blockers, and what needs attention. This bot solves that: it runs automatically every morning, pulls your Jira items + comments, analyzes them with AI, and posts a concise report to Slack — so you’re ready in seconds, not minutes.
+You can run it two ways:
 
-**How it works**
+**1. Trigger-based (scheduled)** — Runs automatically at 6 AM on weekdays. In this mode it uses filters to pull the data and formats it into a report. No AI analysis, just the structured data you need. Good if you want something in your inbox every morning without thinking about it.
 
-1. Runs at 6 AM PST, Mon–Fri (or on demand)
-2. Fetches your Jira items, bugs, release blockers, and comments
-3. AI summarizes priorities, risk level, and top 3–5 actions for the day
-4. Report lands in Slack — no manual prep needed
+**2. On-demand (Cursor)** — When you're in Cursor and type something like "Run my daily report," it uses the full AI to actually analyze everything — comments, priorities, what passed/failed, where to focus. That's when you get the smarter, more contextual summary.
 
-**Demo**
+So: scheduled = filtered data, formatted. On-demand = AI digs in and tells you what matters. Whichever fits your workflow.
 
-[Attach your video here — show: Cursor chat → GitHub Actions trigger → Slack notification]
+[Attach your demo video here]
 
-**Want to build your own?**
+If you want to set up your own, I wrote a single prompt you can paste into Cursor — it walks you through everything step by step. Link below. Happy to help if you run into anything.
 
-I’ve put together a single prompt you can paste into Cursor. It walks you through setup step-by-step (one question at a time) and lets you choose manual runs or a scheduled workflow.
-
-📋 **Prompt + instructions:** https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
-
-📁 **Full repo (code, workflow, docs):** https://github.com/jsaigali-tech/Jeevan-Daily-reports
-
-If you have questions or want help setting it up, reach out — happy to help! 🙌
-```
-
----
-
-## Shorter Version (if character limit)
-
-```
-Hey team! 👋
-
-I built a **Daily Sprint Report bot** — it runs every morning, pulls your Jira + comments, uses AI to summarize priorities and actions, and posts to Slack. No manual prep before meetings.
-
-**Demo:** [Attach video]
-
-**Build your own (one prompt in Cursor):** https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
-
-**Repo:** https://github.com/jsaigali-tech/Jeevan-Daily-reports
-
-Questions? Reach out! 🙌
+Prompt: https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
+Repo: https://github.com/jsaigali-tech/Jeevan-Daily-reports
 ```
 
 ---
