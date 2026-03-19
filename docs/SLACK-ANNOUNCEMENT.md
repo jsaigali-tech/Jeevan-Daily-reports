@@ -7,26 +7,34 @@
 ## THE MESSAGE
 
 ```
-Hey team,
+Hey team 👋
 
-I put together a daily sprint report thing and thought I'd share it. Basically it pulls your Jira items, bugs, release blockers, and comments, then sends a summary to Slack so you can get up to speed before standups without digging through tickets.
+Wanted to share something I built that’s been helping me stay on top of things — a *Daily Sprint Report* that lands in Slack so you’re ready before standups without the usual scramble.
 
-Here's how it works: it fetches data from Jira (and Confluence for release info) based on filters — your assigned items, open bugs, stuff targeting unreleased versions, etc. Then it formats that into a report and posts it.
+*What it does*
+Pulls your Jira items, bugs, release blockers, and comments → formats them into a clean report → posts it to Slack. One place to see what matters.
 
-You can run it two ways:
+*How it fetches data*
+Uses filters to grab: your assigned items, open bugs, stuff targeting unreleased versions, plus Confluence for release info. All in one snapshot.
 
-**1. Trigger-based (scheduled)** — Runs automatically at 6 AM on weekdays. In this mode it uses filters to pull the data and formats it into a report. No AI analysis, just the structured data you need. Good if you want something in your inbox every morning without thinking about it.
+*Two ways to run it*
 
-**2. On-demand (Cursor)** — When you're in Cursor and type something like "Run my daily report," it uses the full AI to actually analyze everything — comments, priorities, what passed/failed, where to focus. That's when you get the smarter, more contextual summary.
+• *Scheduled* — Runs at 6 AM on weekdays. Filtered data, formatted. No AI, just the facts. Set it and forget it.
 
-So: scheduled = filtered data, formatted. On-demand = AI digs in and tells you what matters. Whichever fits your workflow.
+• *On-demand* — In Cursor, type “Run my daily report.” Full AI analysis: comments, priorities, what passed/failed, where to focus. Smarter summary when you need it.
 
-[Attach your demo video here]
+Pick whichever fits your style.
 
-If you want to set up your own, I wrote a single prompt you can paste into Cursor — it walks you through everything step by step. Link below. Happy to help if you run into anything.
+*Demo* 🎬
+[Attach your video here]
 
-Prompt: https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
-Repo: https://github.com/jsaigali-tech/Jeevan-Daily-reports
+*Want your own?*
+One prompt in Cursor walks you through setup step by step. No prior experience needed.
+
+→ Prompt & instructions: https://github.com/jsaigali-tech/Jeevan-Daily-reports/blob/main/docs/ONE-PROMPT-TO-BUILD-ALL.md
+→ Full repo: https://github.com/jsaigali-tech/Jeevan-Daily-reports
+
+Questions? Happy to help — just reach out.
 ```
 
 ---
