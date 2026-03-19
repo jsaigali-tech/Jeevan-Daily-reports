@@ -35,11 +35,20 @@ def _get(url: str, headers: dict) -> dict:
         return json.loads(r.read().decode())
 
 
+def _post(url: str, headers: dict, body: dict) -> dict:
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method="POST", headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
 def jira_request(jql: str, fields: list[str]) -> list[dict]:
-    fields_str = ",".join(fields)
-    url = f"{JIRA_BASE}/rest/api/3/search/jql?jql={urllib.parse.quote(jql)}&maxResults=50&fields={urllib.parse.quote(fields_str)}"
+    """Use POST /rest/api/3/search/jql (legacy /search was removed, returns 410)."""
+    url = f"{JIRA_BASE}/rest/api/3/search/jql"
+    headers = {**_auth_headers(), "Content-Type": "application/json"}
+    body = {"jql": jql, "maxResults": 50, "fields": fields}
     try:
-        data = _get(url, _auth_headers())
+        data = _post(url, headers, body)
         return data.get("issues", [])
     except urllib.error.HTTPError as e:
         print(f"Jira API error {e.code}: {e.read().decode()}", file=sys.stderr)
