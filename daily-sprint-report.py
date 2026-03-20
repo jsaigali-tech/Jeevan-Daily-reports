@@ -188,13 +188,19 @@ def slack_post(text: str) -> None:
         print("ERROR: Set SLACK_BOT_TOKEN", file=sys.stderr)
         sys.exit(1)
     today = datetime.now().strftime("%A, %b %d %Y")
+    # Slack block text limit is 3000 chars; split into chunks
+    chunk_size = 2990
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": f"📋 StandupPulse — {today}", "emoji": True}},
+    ]
+    for i in range(0, len(text), chunk_size):
+        chunk = text[i : i + chunk_size]
+        if chunk.strip():
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk}})
     payload = {
         "channel": channel,
         "text": f"📋 StandupPulse — {today}",
-        "blocks": [
-            {"type": "header", "text": {"type": "plain_text", "text": f"📋 StandupPulse — {today}", "emoji": True}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": text}},
-        ],
+        "blocks": blocks,
     }
     data = json.dumps(payload).encode()
     req = urllib.request.Request(
