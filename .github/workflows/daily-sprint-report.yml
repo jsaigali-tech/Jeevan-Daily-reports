@@ -6,6 +6,15 @@ on:
     # 14:15 UTC = 6:15 AM PST / 7:15 AM PDT (avoid :00 — GitHub delays at top of hour)
     - cron: "15 14 * * 1-5"
   workflow_dispatch:
+    inputs:
+      report_type:
+        description: "Report to run"
+        required: true
+        default: "standup"
+        type: choice
+        options:
+          - standup
+          - ainv-qa-tomorrow
 
 # Prevent overlapping runs; cancel in-progress if a new one starts
 concurrency:
@@ -34,4 +43,4 @@ jobs:
           timeout_seconds: 300
           retry_wait_seconds: 30
           retry_on: error
-          command: python3 daily-sprint-report.py
+          command: ${{ github.event.inputs.report_type == 'ainv-qa-tomorrow' && 'python3 ainv-qa-tomorrow.py' || 'python3 daily-sprint-report.py' }}
