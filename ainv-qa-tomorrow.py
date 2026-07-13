@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-AINV QA Tomorrow — Apex Inventory QA task plan for the next workday.
-Fetches AINV-only Jira data, prioritizes items in QA / assigned to Jeevan,
-and posts an AI-generated execution plan to Slack (or stdout).
+AINV QA Tomorrow — Apex Inventory tasks for the next workday.
+By default reads the live AINV Jira board and lists tickets by board column.
+Set USE_AI=1 to add an AI execution plan on top of the board snapshot.
 """
 from __future__ import annotations
 
 import importlib.util
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -37,6 +41,130 @@ def _tomorrow_label() -> tuple[str, str]:
 
 def _plain_link(key: str) -> str:
     return f"https://axsteam.atlassian.net/browse/{key}"
+
+
+def _jira_get(path: str) -> dict:
+    url = f"{dsp.JIRA_BASE}{path}"
+    return dsp._get(url, dsp._auth_headers())
+
+
+def _find_ainv_board_id() -> int:
+    data = _jira_get(f"/rest/agile/1.0/board?projectKeyOrId={PROJECT}")
+    boards = data.get("values", [])
+    if not boards:
+        print("ERROR: No AINV Jira board found.", file=sys.stderr)
+        sys.exit(1)
+    scrum = next((b for b in boards if b.get("type") == "scrum"), boards[0])
+    return int(scrum["id"])
+
+
+def _board_column_order(board_id: int) -> list[str]:
+    try:
+        config = _jira_get(f"/rest/agile/1.0/board/{board_id}/configuration")
+        columns = config.get("columnConfig", {}).get("columns", [])
+        order: list[str] = []
+        for column in columns:
+            for status in column.get("statuses", []):
+                name = status.get("name")
+                if name and name not in order:
+                    order.append(name)
+        return order
+    except urllib.error.HTTPError:
+        return []
+
+
+def _fetch_board_issues(board_id: int) -> list[dict]:
+    issues: list[dict] = []
+    start_at = 0
+    fields = [
+        "summary",
+        "status",
+        "issuetype",
+        "priority",
+        "assignee",
+        "updated",
+        "duedate",
+        "fixVersions",
+    ]
+    while True:
+        query = urllib.parse.urlencode(
+            {
+                "startAt": start_at,
+                "maxResults": 50,
+                "fields": ",".join(fields),
+                "jql": f"project = {PROJECT} AND statusCategory != Done ORDER BY rank ASC",
+            }
+        )
+        data = _jira_get(f"/rest/agile/1.0/board/{board_id}/issue?{query}")
+        batch = data.get("issues", [])
+        issues.extend(batch)
+        if start_at + len(batch) >= data.get("total", 0) or not batch:
+            break
+        start_at += len(batch)
+    return issues
+
+
+def _fmt_board_issue(issue: dict, slack: bool) -> str:
+    fields = issue.get("fields", {})
+    key = issue["key"]
+    summary = fields.get("summary", "")
+    status = fields.get("status", {}).get("name", "")
+    issue_type = fields.get("issuetype", {}).get("name", "")
+    priority = fields.get("priority", {}).get("name", "")
+    assignee = fields.get("assignee")
+    assignee_name = assignee.get("displayName", "Unassigned") if assignee else "Unassigned"
+    due = (fields.get("duedate") or "—")[:10]
+    if slack:
+        return (
+            f"• <{_plain_link(key)}|{key}> — {summary} | {issue_type} | "
+            f"{priority} | {assignee_name} | Due: {due}"
+        )
+    return f"• {key} — {summary} | {status} | {issue_type} | {priority} | {assignee_name} | Due: {due}"
+
+
+def _board_report(board_id: int, issues: list[dict], tomorrow_label: str, slack: bool) -> str:
+    column_order = _board_column_order(board_id)
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for issue in issues:
+        status = issue.get("fields", {}).get("status", {}).get("name", "Unknown")
+        grouped[status].append(issue)
+
+    ordered_statuses = [s for s in column_order if s in grouped]
+    for status in sorted(grouped):
+        if status not in ordered_statuses:
+            ordered_statuses.append(status)
+
+    header = f"AINV Jira Board — {tomorrow_label}"
+    if slack:
+        lines = [f"*{header}*", f"<https://axsteam.atlassian.net/jira/software/projects/AINV/boards|Open AINV board>", ""]
+    else:
+        lines = [header, "https://axsteam.atlassian.net/jira/software/projects/AINV/boards", ""]
+
+    for status in ordered_statuses:
+        column_issues = grouped[status]
+        if slack:
+            lines.append(f"*{status} ({len(column_issues)})*")
+        else:
+            lines.append(f"{status} ({len(column_issues)})")
+            lines.append("-" * 40)
+        for issue in column_issues:
+            lines.append(_fmt_board_issue(issue, slack))
+        lines.append("")
+
+    my_items = [
+        issue
+        for issue in issues
+        if (issue.get("fields", {}).get("assignee") or {}).get("accountId") == dsp.JEEVAN_ACCOUNT_ID
+    ]
+    if my_items:
+        if slack:
+            lines.append(f"*YOUR ASSIGNED AINV ITEMS ({len(my_items)})*")
+        else:
+            lines.append(f"YOUR ASSIGNED AINV ITEMS ({len(my_items)})")
+            lines.append("-" * 40)
+        for issue in my_items:
+            lines.append(_fmt_board_issue(issue, slack))
+    return "\n".join(lines).strip()
 
 
 def _fallback_ainv_report(
@@ -166,7 +294,17 @@ def _deliver(report: str, tomorrow_label: str) -> None:
 
 def main() -> None:
     tomorrow_label, tomorrow_iso = _tomorrow_label()
-    print(f"Fetching AINV QA data for {tomorrow_label}...")
+    board_only = os.environ.get("USE_AI", "").lower() not in ("1", "true", "yes")
+    slack = os.environ.get("OUTPUT_MODE", "").lower() != "stdout" and bool(os.environ.get("SLACK_BOT_TOKEN"))
+
+    print(f"Fetching AINV board data for {tomorrow_label}...")
+    board_id = _find_ainv_board_id()
+    board_issues = _fetch_board_issues(board_id)
+    report = _board_report(board_id, board_issues, tomorrow_label, slack=slack)
+
+    if board_only:
+        _deliver(report, tomorrow_label)
+        return
 
     base_fields = [
         "summary",
@@ -273,21 +411,13 @@ OUTPUT (Slack mrkdwn):
 Be specific and actionable. This is for hands-on QA execution, not a generic status update."""
 
     print("Generating AI plan...")
-    report = dsp.ai_analyze(context, system_prompt)
-    if not report:
-        print("No AI key available. Using structured fallback.", file=sys.stderr)
-        report = _fallback_ainv_report(
-            my_items,
-            deployed_to_qa,
-            ready_for_prod,
-            blocked_issues,
-            ainv_bugs,
-            prerelease,
-            due_tomorrow,
-            tomorrow_label,
-        )
+    ai_report = dsp.ai_analyze(context, system_prompt)
+    if not ai_report:
+        print("No AI key available. Using board snapshot only.", file=sys.stderr)
+        _deliver(report, tomorrow_label)
+        return
 
-    _deliver(report, tomorrow_label)
+    _deliver(f"{report}\n\n---\n\n{ai_report}", tomorrow_label)
 
 
 if __name__ == "__main__":
